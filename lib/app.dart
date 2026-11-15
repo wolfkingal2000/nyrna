@@ -23,6 +23,19 @@ class App extends StatefulWidget {
 }
 
 class _AppState extends State<App> with TrayListener, WindowListener {
+  /// Maximum interval between two left clicks on the tray icon for them
+  /// to be considered a double click.
+  static const Duration _doubleClickThreshold = Duration(milliseconds: 400);
+
+  /// Time of the most recent left click on the tray icon.
+  DateTime? _lastTrayIconMouseDown;
+
+  /// Pops up the tray context menu after a single left click.
+  ///
+  /// The short delay allows a possible second click to be recognized as a
+  /// double click instead of leaving a context menu open.
+  Timer? _traySingleClickTimer;
+
   @override
   void initState() {
     trayManager.addListener(this);
@@ -32,6 +45,7 @@ class _AppState extends State<App> with TrayListener, WindowListener {
 
   @override
   void dispose() {
+    _traySingleClickTimer?.cancel();
     trayManager.removeListener(this);
     windowManager.removeListener(this);
     super.dispose();
@@ -77,7 +91,26 @@ class _AppState extends State<App> with TrayListener, WindowListener {
 
   @override
   void onTrayIconMouseDown() {
-    trayManager.popUpContextMenu();
+    // Fired on left click. Wait briefly for a possible second click: if one
+    // arrives, treat it as a double click and show the main window, otherwise
+    // pop up the context menu as before.
+    // https://github.com/Merrit/nyrna/issues/271
+    final DateTime now = DateTime.now();
+    final bool isDoubleClick = (_lastTrayIconMouseDown != null) &&
+        now.difference(_lastTrayIconMouseDown!) <= _doubleClickThreshold;
+
+    if (isDoubleClick) {
+      _traySingleClickTimer?.cancel();
+      _traySingleClickTimer = null;
+      _lastTrayIconMouseDown = null;
+      context.read<AppWindow>().show();
+    } else {
+      _lastTrayIconMouseDown = now;
+      _traySingleClickTimer?.cancel();
+      _traySingleClickTimer = Timer(_doubleClickThreshold, () {
+        trayManager.popUpContextMenu();
+      });
+    }
     super.onTrayIconMouseDown();
   }
 

@@ -120,7 +120,16 @@ class AppWindow {
     if (savedWindowRectJson == null) await windowManager.center();
   }
 
-  Future<void> show() async => await windowManager.show();
+  /// Shows the window, bringing it to the foreground.
+  ///
+  /// Also focuses the window, which restores it if minimized and brings it
+  /// to the front, so it is reliably surfaced even if it was hidden,
+  /// minimized, or behind other windows.
+  /// https://github.com/Merrit/nyrna/issues/271
+  Future<void> show() async {
+    await windowManager.show();
+    await windowManager.focus();
+  }
 
   /// Returns a unique identifier for the current configuration of screens.
   ///
