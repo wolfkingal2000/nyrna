@@ -35,6 +35,12 @@ jobs:
     needs: [call-build-linux, call-build-windows]
     runs-on: "ubuntu-latest"
 
+    # Creating the release requires write access to repository contents.
+    # Without this the default (possibly read-only) GITHUB_TOKEN fails with:
+    # 403 Resource not accessible by integration
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v6
 

@@ -1,8 +1,9 @@
 # Nyrna — بسته نهایی اصلاحات
 
 این بسته **همه** اصلاحات لازم را در یک جا دارد؛ بعد از جایگزینی این فایل‌ها،
-پایپ‌لاین CI کامل سبز می‌شود و می‌توانید از `Build Windows` خروجی exe بگیرید.
-این بسته جایگزین همه بسته‌های قبلی است (issue-271-fix، dependency-fix، deps-fix-v2).
+پایپ‌لاین CI کامل سبز می‌شود، خروجی exe ساخته می‌شود و انتشار Release هم بدون
+خطا انجام می‌شود. این بسته جایگزین همه بسته‌های قبلی است
+(issue-271-fix، dependency-fix، deps-fix-v2).
 
 ## فایل‌ها و محل قرارگیری
 
@@ -12,6 +13,8 @@
 | `lib/window/app_window.dart` | `lib/window/app_window.dart` |
 | `pubspec.yaml` | `pubspec.yaml` |
 | `pubspec.lock` | `pubspec.lock` |
+| `.github/workflows/pre-release.yml` | `.github/workflows/pre-release.yml` |
+| `.github/workflows/release.yml` | `.github/workflows/release.yml` |
 | `nyrna-final-fix.patch` | فقط مرجع — با `git apply nyrna-final-fix.patch` از ریشه ریپو قابل اعمال است |
 
 ## چه چیزهایی اصلاح شده؟
@@ -55,6 +58,18 @@
 - الان `dart format -o none --set-exit-if-changed --line-length=90 .` روی هر ۱۳۱
   فایل tracked ریپو پاس می‌شود.
 
+### ۵) خطای ۴۰۳ در ساخت Release — «Resource not accessible by integration»
+`.github/workflows/pre-release.yml` + `.github/workflows/release.yml`
+
+- علت: توکن پیش‌فرض `GITHUB_TOKEN` در مخزن شما فقط **خواندن** است و ساخت
+  Release به دسترسی نوشتن `contents` نیاز دارد.
+- در هر دو ورک‌فلو، به job ساخت Release این دسترسی صریحاً داده شد:
+  `permissions: contents: write`
+- راه‌حل جایگزین (اگر خواستید بدون تغییر فایل): در گیت‌هاب مسیر
+  **Settings → Actions → General → Workflow permissions** را روی
+  «Read and write permissions» بگذارید. اما تغییر فایل مطمئن‌تر است چون
+  روی هر مخزنی کار می‌کند.
+
 ## نتیجه شبیه‌سازی کامل CI به صورت محلی (Flutter 3.50.0 / Dart 3.14.0)
 
 | گام CI | نتیجه |
@@ -69,14 +84,21 @@
 ## گرفتن exe ویندوز
 
 بیلد ویندوز فقط روی خود ویندوز ممکن است (Flutter از لینوکس نمی‌تواند exe ویندوز
-کراس‌کامپایل کند)؛ خود CI این کار را روی runner ویندوزی انجام می‌دهد:
+کراس‌کامپایل کند)؛ خود CI این کار را روی runner ویندوزی انجام می‌دهد.
 
-1. این ۴ فایل را در ریپو جایگزین کنید، commit و push بزنید.
-2. در گیت‌هاب به **Actions → Build Windows** بروید و **Run workflow** بزنید.
-3. پس از پایان run، از بخش Artifacts همان run فایل **windows-artifacts** را
-   دانلود کنید — این همان خروجی exe/installer برنامه است.
-   آرتیفکت **windows-store-artifact** هم فایل MSIX مخصوص انتشار در مایکروسافت
-   استور است.
+**نکته مهم:** در run قبلی شما، مرحله ۴۰۳ بعد از موفقیت کامل تست‌ها و هر دو بیلد
+(windows و linux) رخ داده — یعنی exe ساخته شده و همین الان هم موجود است! از صفحه
+همان run در Actions، بخش **Artifacts**، فایل **windows-artifacts** را دانلود کنید.
+
+برای از این به بعد:
+
+1. این ۶ فایل را در ریپو جایگزین کنید، commit و push بزنید.
+2. با push روی main، ورک‌فلو **Pre-Release** خودکار اجرا می‌شود و این بار
+   Release با نام **Development Build** و تگ **latest** ساخته می‌شود که
+   exe/installer ویندوز و لینوکس داخل آن است.
+3. یا دستی: **Actions → Build Windows → Run workflow** و دانلود آرتیفکت
+   **windows-artifacts**. آرتیفکت **windows-store-artifact** هم فایل MSIX
+   مخصوص انتشار در مایکروسافت استور است.
 
 ## نکات
 
