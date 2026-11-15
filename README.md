@@ -1,53 +1,64 @@
-# رفع خطای «Prepare for build» در CI نیرنا — پیدا نشدن کامیت وابستگی hotkey_manager_linux
+# رفع خطای حل‌نشدن وابستگی‌ها (freezed / test) در بیلد نیرنا — نسخه کامل
 
 ## مشکل چیست؟
 
-جاب بیلد نیرنا در مرحله «Prepare for build» (دستور `flutter pub get`) با این خطا شکست می‌خورد:
+جاب بیلد در `flutter pub get` با خطای زیر شکست می‌خورد:
 
-> nyrna references hotkey_manager_linux at Git commit `1b31e3ca4ab017ee72f54a7065b2073a88403d61`, but that ref could not be found in the repository.
+> So, because nyrna depends on both freezed ^3.2.0 and test ^1.22.0, version solving failed.
+> Try upgrading your constraint on freezed: flutter pub add dev:freezed:^4.0.3
 
-**علت:** در `pubspec.yaml` نیرنا، پکیج `hotkey_manager_linux` از فورک `gepbird/hotkey_manager` با کامیت مشخص `1b31e3c...` گرفته می‌شود (این کامیت، فیکس خطای بیلد با Clang 21 است). صاحب فورک gepbird مخزن را force-push کرده و این کامیت دیگر روی هیچ برنچ یا تگی قرار ندارد؛ به همین دلیل `flutter pub get` (که از طریق `git ls-remote` رفرنس‌ها را پیدا می‌کند) دیگر آن را نمی‌بیند. خود کامیت هنوز در مخزن وجود دارد ولی قابل fetch نیست.
+**علت دقیق:** CI نیرنا آخرین نسخه پایدار Flutter را نصب می‌کند (بدون پین کردن نسخه). Flutter 3.50.0 → `test_api: 0.7.14` را تحمیل می‌کند → تنها نسخه سازگارِ `test` می‌شود `1.32.0` → که `test_core 0.6.20` را می‌آورد که `analyzer >=13.0.0 <15.0.0` می‌خواهد. اما **همه نسخه‌های freezed 3.x سقف analyzer را زیر 9 بسته‌اند** (برای مثال freezed 3.2.3: `analyzer >=7.5.9 <9.0.0`). پس هیچ freezed 3.x با این SDK حل نمی‌شود و pub شکست می‌خورد. freezed 4.0.3 (`analyzer >=14.0.0 <15.0.0`) دقیقاً این شکاف را پر می‌کند.
 
-## راه‌حل — فقط تغییر URL
+## چه چیزهایی تغییر کرد؟
 
-کامیت `1b31e3c...` در مخزن اصلی `leanflutter/hotkey_manager` هنوز موجود است و از طریق رفرنس `refs/pull/66/head` (هِدِ [PR شماره ۶۶](https://github.com/leanflutter/hotkey_manager/pull/66) در مخزن اصلی) سرو می‌شود. همان SHA دقیق یعنی دقیقاً همان محتوا — هیچ تغییری در کد پکیج نیست، فقط آدرس مخزن عوض می‌شود.
+| فایل/پکیج | تغییر | دلیل |
+|---|---|---|
+| `pubspec.yaml` — `freezed` | `^3.2.0` → **`^4.0.3`** | رفع تداخل با analyzer 14 (پیشنهاد خود pub) |
+| `pubspec.yaml` — `json_annotation` | `^4.8.1` → **`^4.12.0`** | نسخه جدید json_serializable آن را می‌طلبد |
+| `pubspec.yaml` — `hotkey_manager_linux` | URL از فورک gepbird به `leanflutter/hotkey_manager` | فیکس قبلی (کامیت gepbird با force-push حذف شده بود) — در این بسته هم هست |
+| `pubspec.lock` | فقط ۲۰ پکیجِ زنجیره build/test به‌روز شد | بقیه پکیج‌ها با نسخه قبلی قفل ماندند تا هیچ API شکار نشود (مثلاً tray_manager روی 0.5.2 ماند و به 0.9.0 نپرید!) |
 
-بررسی و تایید شده:
-- با `git ls-remote https://github.com/leanflutter/hotkey_manager.git` کامیت `1b31e3c...` دقیقاً روی `refs/pull/66/head` ثبت است.
-- شبیه‌سازی دقیق روش resolution خود pub (مirror clone و سپس `git rev-list`) روی مخزن gepbird خطای `bad object` می‌دهد و روی مخزن leanflutter همان کامیت را resolve می‌کند.
+## چرا دیگر چیزی نمی‌شکند؟ (بررسی کامل)
+
+با نصب واقعی Flutter 3.50.0 / Dart 3.14.0 همه این‌ها اجرا و تایید شد:
+
+1. **شبیه‌سازی resolver خود pub:** با freezed 3.x دقیقاً همان خطای CI شما بازتولید شد؛ با `^4.0.3` حل شد.
+2. **`flutter pub get` واقعی روی پروژه:** با موفقیت اجرا شد و لاک‌فایل این بسته را **بدون هیچ تغییری** پذیرفت.
+3. **`dart run build_runner build`:** با freezed 4.0.3 تمام کدهای تولیدی (۲۲ فایل `.freezed.dart` و ...) بدون خطا بازتولید شد. تنها تغییر Breaking در freezed 4 (ممنوع شدن `final` داخل پارامتر سازنده) در کد نیرنا استفاده نشده — بررسی شد.
+4. **`flutter analyze`:** صفر خطا و صفر هشدار؛ فقط ۲۴ نکته‌ی info از نوع deprecation مربوط به تغییرات خود Flutter 3.47+ (فایل material.dart) که از قبل در مخزن بوده و جلوی بیلد را نمی‌گیرد.
+5. **`flutter test`:** ۱۷۴ تست پاس شد. فقط ۵ تست مربوط به D-Bus لینوکس در محیط بدون دسکتاپFail می‌شود (مربوط به sandbox است، نه وابستگی‌ها؛ روی سیستم/CI واقعی مشکلی ندارند).
+6. **هر ۶ وابستگی git با کامیت پین‌شده** (helpers، kwin، window_size، flutter_app_builder، hotkey_manager_windows، hotkey_manager_linux) با همان روشی که pub رفرنس‌ها را پیدا می‌کند بررسی شدند — همگی موجود و قابل دریافت‌اند.
+
+نکته مهم درباره `pubspec.lock`: CI از `flutter pub get` استفاده می‌کند که به لاک‌فایل وفادار می‌ماند و فقط موارد مغایر را دوباره حل می‌کند. با لاک‌فایل این بسته، فقط زنجیره freezed/test/analyzer جابه‌جا می‌شود و بقیه پکیج‌ها روی نسخه‌های فعلی می‌مانند — پس خطر به‌هم‌خوردن API بقیه پکیج‌ها صفر است.
 
 ## فایل‌ها را کجا قرار بدهم؟
 
-دو فایل `pubspec.yaml` و `pubspec.lock` باید در **ریشه پروژه نیرنا** (کنار فایل‌هایی مثل `README.md` و پوشه `lib`) جایگزین شوند — یعنی همان جایی که سورس را کلون کرده‌اید:
+دو فایل `pubspec.yaml` و `pubspec.lock` را در **ریشه پروژه نیرنا** جایگزین کنید (کنار `README.md` و پوشه `lib`)، یا پچ را اعمال کنید:
 
 ```bash
-git clone https://github.com/Merrit/nyrna.git   # یا فورک خودتان
-cd nyrna
-# دو فایل pubspec.yaml و pubspec.lock این بسته را در همین پوشه جایگزین کنید
+cd nyrna   # یا فورک خودتان
+git apply --check nyrna-deps-fix-v2.patch   # بررسی
+git apply nyrna-deps-fix-v2.patch           # اعمال
+git add -A && git commit -m "Fix dependency resolution: freezed 4 + updated lock" && git push
 ```
 
-یا با گیت:
+این پچ جایگزین پچ قبلی (`nyrna-dependency-fix.patch`) است و **همه** تغییرات لازم در سطح وابستگی‌ها را دارد؛ پچ قبلی دیگر لازم نیست. پچ فیکس تری (issue 271) با این فایل‌ها تداخلی ندارد و می‌توانند با هم اعمال شوند.
 
+## گرفتن بیلد ویندوز (exe)
+
+**توجه:** بیلد ویندوز فقط روی ویندوز (با Visual Studio) امکان‌پذیر است؛ در محیط لینوکسی قابل ساخت نیست. دو راه دارید:
+
+**راه ۱ — از CI خودتان (پیشنهادی):**
+1. این فایل‌ها را کامیت و پوش کنید تا جاب «Build Windows» اجرا شود.
+2. از صفحه اجرای workflow در گیت‌هاب، پایین صفحه در بخش **Artifacts** فایل `windows-artifacts` را دانلود کنید — داخلش `nyrna.exe` به همراه DLLها و msix هست. (workflow خودش همه خروجی‌ها را به‌صورت artifact آپلود می‌کند و به secret هم نیاز ندارد.)
+3. برای اجرای دستی: از تب Actions → Build Windows → **Run workflow** استفاده کنید.
+
+**راه ۲ — بیلد محلی روی ویندوز:**
 ```bash
-git apply --check nyrna-dependency-fix.patch   # بررسی سلامت پچ
-git apply nyrna-dependency-fix.patch           # اعمال تغییرات
+flutter config --enable-windows-desktop
+flutter pub get
+flutter build windows --release
+# خروجی: build\windows\x64\runner\Release\nyrna.exe
 ```
 
-سپس کامیت و پوش کنید تا جاب CI دوباره اجرا شود. مرحله «Prepare for build» فقط `flutter config --enable-windows-desktop` و `flutter pub get` را اجرا می‌کند و کش مخصوص pub در workflow وجود ندارد، پس همین دو فایل کافی است.
-
-## چه چیزی تغییر کرد؟
-
-| فایل | تغییر |
-|---|---|
-| `pubspec.yaml` | در `dependency_overrides` برای `hotkey_manager_linux` مقدار `url` از `https://github.com/gepbird/hotkey_manager.git` به `https://github.com/leanflutter/hotkey_manager.git` تغییر کرد (رفرنس `ref` همان کامیت قبلی است). |
-| `pubspec.lock` | همان تغییر URL برای هماهنگ ماندن لاک‌فایل با pubspec (بیلد یکدست و تکرارپذیر می‌ماند). |
-
-چیز دیگری تغییر نکرده است — فیکس قبلی (دابل‌کلیک تری، Issue 271) اگر جداگانه اعمالش کرده‌اید، با این پچ تداخلی ندارد (فایل‌هایش `lib/app.dart` و `lib/window/app_window.dart` هستند و با این فایل‌ها مشترک نیستند).
-
-## چرا این راه بهتر از بقیه گزینه‌هاست؟
-
-- **مخزن اصلی (upstream):** کامیت هنوز merge نشده؛ ضمن اینکه upstream به‌تازگی به ساختار تک‌پکیجی با نسخه 0.4.0 مهاجرت کرده که به Flutter 3.50 و پکیج `nativeapi` نیاز دارد — با نیرنا فعلی سازگار نیست و کلی تغییر کد می‌خواهد.
-- **پکیج hosted:** نسخه منتشرشده `hotkey_manager_linux 0.2.0` (مارس ۲۰۲۴) فیکس Clang 21 را ندارد.
-- **برنچ‌های فورک Merrit:** هیچ‌کدام از برنچ‌های موجود (`main`، `linux_keycodes`) این کامیت را شامل نمی‌شوند.
-
-پس نگه‌داشتن همان کامیت روی رفرنس PR مخزن اصلی، کم‌ریسک‌ترین و تمیزترین راه است.
+اگر جاب دوباره در هر مرحله‌ای شکست خورد، لاگ کامل همان مرحله را بفرستید تا دقیق بررسی کنم.
