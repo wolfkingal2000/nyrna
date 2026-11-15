@@ -96,7 +96,8 @@ class _AppState extends State<App> with TrayListener, WindowListener {
     // pop up the context menu as before.
     // https://github.com/Merrit/nyrna/issues/271
     final DateTime now = DateTime.now();
-    final bool isDoubleClick = (_lastTrayIconMouseDown != null) &&
+    final bool isDoubleClick =
+        (_lastTrayIconMouseDown != null) &&
         now.difference(_lastTrayIconMouseDown!) <= _doubleClickThreshold;
 
     if (isDoubleClick) {
